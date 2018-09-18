@@ -4,6 +4,7 @@ import { format } from "url";
 import * as log from "electron-log";
 import { autoUpdater, UpdateCheckResult } from "electron-updater"
 import Config from "./config";
+import { getConfigPath } from "./utils";
 
 const isDevelopment = process.env.NODE_ENV === 'development'
 const isMac = process.platform === 'darwin';
@@ -19,17 +20,14 @@ const config: Config = getConfig();
 //-------------------------------------------------------------------
 autoUpdater.logger = log;
 log.transports.file.level = 'info';
-log.info('App starting...');
+log.info('App starting...', isDevelopment);
 
 function getConfig() {
   if (!isMac && !isWin) {
     dialog.showErrorBox('系统错误', '不支持此操作系统');
     app.quit();
   }
-  const configPath = path.join(
-    isDevelopment || isWin
-      ? app.getAppPath()
-      : app.getPath('userData'), isDevelopment ? '.' : (isWin ? '..' : '.'), 'config.json');
+  const configPath = getConfigPath(isDevelopment);
   log.info(`configPath=${configPath}`);
   let t = Config.load(configPath);
   if (t == null) {
@@ -108,11 +106,19 @@ function createDefaultWindow() {
 
   mainWindow.webContents.on('new-window', (event, url, frameName, disposition, options, additionalFeatures) => {
     // open window as modal
-    event.preventDefault()
+    event.preventDefault();
+    if (!config.OpenNewWindow.canOpenNewWindow) {
+      dialog.showErrorBox('错误', config.OpenNewWindow.message);
+      return;
+    }
     Object.assign(options, {
+      fullscreen: false,
+      frame: false,
       modal: true,
       x: undefined,
       y: undefined,
+      width: undefined,
+      height: undefined,
       autoHideMenuBar: true,
       parent: mainWindow,
       center: true,
@@ -122,7 +128,7 @@ function createDefaultWindow() {
     })
     //event.newGuest = new BrowserWindow(options)
     const win = new BrowserWindow(options);
-    win.maximize();
+    //win.maximize();
     Object.assign(event, {
       newGuest: win
     })
@@ -201,7 +207,6 @@ app.on('ready', function () {
   const menu = Menu.buildFromTemplate(template);
   Menu.setApplicationMenu(menu);
   createDefaultWindow();
-  sendStatusToWindow(JSON.stringify(config));
   if (config.Update.autoCheck) {
     // autoUpdater.checkForUpdates();
     autoUpdater.checkForUpdatesAndNotify();

@@ -1,9 +1,14 @@
 import * as Fs from 'fs';
+import * as log from 'electron-log';
 
 interface IUpdateConfig {
     autoCheck: boolean,
     autoDownload: boolean,
     autoInstall: boolean
+}
+interface INewWindow{
+    canOpenNewWindow: boolean,
+    message:string
 }
 interface IConfig {
     version?: number,
@@ -11,9 +16,10 @@ interface IConfig {
     alwaysOnTop: boolean,
     url: string,
     update: IUpdateConfig,
-    startOnLogin: boolean
+    startOnLogin: boolean,
+    openNewWindow:INewWindow
 }
-const CONFIG_VERSION = 2;
+const CONFIG_VERSION = 3;
 export default class Config {
     private _data: IConfig;
     private _configPath: Fs.PathLike;
@@ -30,6 +36,9 @@ export default class Config {
     }
     public get Update(): IUpdateConfig {
         return this._data.update;
+    }
+    public get OpenNewWindow(): INewWindow {
+        return this._data.openNewWindow;
     }
     public get StartOnLogin(): boolean {
         return this._data.startOnLogin;
@@ -52,7 +61,11 @@ export default class Config {
                 autoDownload: true,
                 autoInstall: false
             },
-            startOnLogin: true
+            startOnLogin: true,
+            openNewWindow: {
+                canOpenNewWindow: false,
+                message:'禁止打开新窗口'
+            }
         }
     }
     static load(url: Fs.PathLike): Config {
@@ -62,6 +75,7 @@ export default class Config {
             config._data = <IConfig>JSON.parse(Fs.readFileSync(url).toString());
             config.checkVersion();
         } catch (erro) {
+            log.error (erro.message);
             return null;
         }
         return config;
@@ -71,6 +85,7 @@ export default class Config {
             if (CONFIG_VERSION <= this._data.version) return;
         }
         this._data = Object.assign(this.getDefaultConfig(), this._data);
+        this._data.version = CONFIG_VERSION;
         this.save(this._configPath);
     }
     public save(url: Fs.PathLike): Config {
