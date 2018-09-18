@@ -1,9 +1,10 @@
-// This is free and unencumbered software released into the public domain.
-// See LICENSE for details
+import { app, BrowserWindow, Menu } from "electron";
+import * as path from "path";
+import { format } from "url";
+import * as log from "electron-log";
+import { autoUpdater } from "electron-updater"
 
-const {app, BrowserWindow, Menu, protocol, ipcMain} = require('electron');
-const log = require('electron-log');
-const {autoUpdater} = require("electron-updater");
+const isDevelopment = process.env.NODE_ENV === 'development'
 
 //-------------------------------------------------------------------
 // Logging
@@ -14,7 +15,7 @@ const {autoUpdater} = require("electron-updater");
 // but it sure makes debugging easier :)
 //-------------------------------------------------------------------
 autoUpdater.logger = log;
-autoUpdater.logger.transports.file.level = 'info';
+log.transports.file.level = 'info';
 log.info('App starting...');
 
 //-------------------------------------------------------------------
@@ -22,7 +23,8 @@ log.info('App starting...');
 //
 // THIS SECTION IS NOT REQUIRED
 //-------------------------------------------------------------------
-let template = []
+let template: any[] = []
+
 if (process.platform === 'darwin') {
   // OS X
   const name = app.getName();
@@ -42,31 +44,56 @@ if (process.platform === 'darwin') {
   })
 }
 
+let mainWindow: Electron.BrowserWindow;
 
-//-------------------------------------------------------------------
-// Open a window that displays the version
-//
-// THIS SECTION IS NOT REQUIRED
-//
-// This isn't required for auto-updates to work, but it's easier
-// for the app to show a window than to have to click "About" to see
-// that updates are working.
-//-------------------------------------------------------------------
-let win;
-
-function sendStatusToWindow(text) {
+function sendStatusToWindow(text: string) {
   log.info(text);
-  win.webContents.send('message', text);
+  mainWindow.webContents.send('message', text);
 }
+
 function createDefaultWindow() {
-  win = new BrowserWindow();
-  win.webContents.openDevTools();
-  win.on('closed', () => {
-    win = null;
+  mainWindow = new BrowserWindow({
+    webPreferences: {
+      // nodeIntegration:false,
+      nativeWindowOpen: true
+    }
   });
-  win.loadURL(`file://${__dirname}/version.html#v${app.getVersion()}`);
-  return win;
+  if (isDevelopment) {
+    mainWindow.webContents.openDevTools();
+  }
+  mainWindow.on('closed', () => {
+    mainWindow = null;
+  });
+  mainWindow.loadURL(format({
+    protocol: 'file',
+    pathname: path.join(__dirname, "../version.html"),
+    hash: `v${app.getVersion()}`
+  }))
+
+  mainWindow.webContents.on('new-window', (event, url, frameName, disposition, options, additionalFeatures) => {
+    // open window as modal
+    event.preventDefault()
+    Object.assign(options, {
+      modal: true,
+      x: undefined,
+      y: undefined,
+      autoHideMenuBar: true,
+      parent: mainWindow,
+      center: true,
+      webPreferences: {
+        nodeIntegration: false
+      }
+    })
+    //event.newGuest = new BrowserWindow(options)
+    const win = new BrowserWindow(options);
+    win.maximize();
+    Object.assign(event, {
+      newGuest: win
+    })
+  })
+  return mainWindow;
 }
+
 autoUpdater.on('checking-for-update', () => {
   sendStatusToWindow('Checking for update...');
 })
@@ -88,15 +115,28 @@ autoUpdater.on('download-progress', (progressObj) => {
 autoUpdater.on('update-downloaded', (info) => {
   sendStatusToWindow('Update downloaded');
 });
-app.on('ready', function() {
+
+// Quit when all windows are closed.
+app.on("window-all-closed", () => {
+  // On OS X it is common for applications and their menu bar
+  // to stay active until the user quits explicitly with Cmd + Q
+  if (process.platform !== "darwin") {
+    app.quit();
+  }
+});
+
+app.on("activate", () => {
+  // On OS X it"s common to re-create a window in the app when the
+  // dock icon is clicked and there are no other windows open.
+  if (mainWindow === null) {
+    createDefaultWindow();
+  }
+});
+app.on('ready', function () {
   // Create the Menu
   const menu = Menu.buildFromTemplate(template);
   Menu.setApplicationMenu(menu);
-
   createDefaultWindow();
-});
-app.on('window-all-closed', () => {
-  app.quit();
 });
 
 //
@@ -109,7 +149,7 @@ app.on('window-all-closed', () => {
 // This will immediately download an update, then install when the
 // app quits.
 //-------------------------------------------------------------------
-app.on('ready', function()  {
+app.on('ready', function () {
   autoUpdater.checkForUpdatesAndNotify();
 });
 
@@ -140,3 +180,7 @@ app.on('ready', function()  {
 // autoUpdater.on('update-downloaded', (info) => {
 //   autoUpdater.quitAndInstall();  
 // })
+
+
+// In this file you can include the rest of your app"s specific main process
+// code. You can also put them in separate files and require them here.
