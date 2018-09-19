@@ -58,7 +58,24 @@
         });
         win.addEventListener('new-window', (e) => {
             openNewWindow(e.url);
+        });
+        win.addEventListener('will-navigate', (event)=>{
+            const canOpen = ipcRenderer.sendSync('check-url-can-open', event.url);
+            console.log('will-navigate', canOpen);
+            if(!ipcRenderer.sendSync('check-url-can-open', event.url)){
+                event.preventDefault();
+                event.stopPropagation();
+                // window.close();
+                //win.loadURL('data:text/plain, 该页面禁止访问');
+                document.getElementById('win').remove();
+            }
         })
+        win.addEventListener('did-get-redirect-request', (event, oldURL, newURL, isMainFrame, httpResoponseCode, requestMethod, referrer, headers) => {
+            //console.log('did-get-redirect-request', newURL, httpResoponseCode, event);
+            if(!ipcRenderer.sendSync('check-url-can-open', event.newURL)){
+                event.preventDefault();
+            }
+        });
         const onload = () => {
             win.removeEventListener('dom-ready', onload);
             if (location.hash) {

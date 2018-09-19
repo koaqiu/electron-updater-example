@@ -1,6 +1,6 @@
 import { app, BrowserWindow, Menu, dialog, webContents, ipcMain, IpcMessageEvent } from "electron";
 import * as path from "path";
-import { format } from "url";
+import { format as formatUrl, parse as parseUrl } from 'url'
 import * as log from "electron-log";
 import { autoUpdater, UpdateCheckResult } from "electron-updater"
 import Config from "./config";
@@ -22,11 +22,37 @@ autoUpdater.logger = log;
 log.transports.file.level = 'info';
 log.info('App starting...', isDevelopment);
 
-const getNewWinUrl = (url: string) => format({
+const getNewWinUrl = (url: string) => formatUrl({
   protocol: 'file',
   pathname: path.join(__dirname, "../renderer/win.html"),
   hash: encodeURI(url)
 });
+const checkUrlCanOpen = (url: string, whiteList: string[]) => {
+  //if (!config.OpenNewWindow.canOpenNewWindow) return false;
+  if (!whiteList || whiteList.length < 1) return true;
+  const Url = parseUrl(url);
+  const domain = whiteList
+    .map(value => value.trim())
+    .filter((value) => {
+      if (!value || value.length < 1)
+        return false;
+      if (value.split('.').length < 2)
+        return false;
+      return true;
+    })
+    .find((value) => {
+      const d1 = Url.hostname.split('.').reverse();
+      const d2 = value.split('.').reverse();
+      if (d2.length > d1.length)
+        return false;
+      for (let i = 0; i < d2.length; i++) {
+        if (d1[i].toLocaleLowerCase() != d2[i].toLocaleLowerCase())
+          return false;
+      }
+      return true;
+    });
+  return !!domain;
+}
 function getConfig() {
   if (!isMac && !isWin) {
     dialog.showErrorBox('系统错误', '不支持此操作系统');
@@ -99,14 +125,17 @@ function createClientWindow(url: string) {
       nodeIntegration: true
     }
   });
-  if(isDevelopment){
+  if (isDevelopment) {
     win.webContents.openDevTools();
   }
   win.webContents.once('did-finish-load', () => {
     win.webContents.send('set-window-id', win.id);
   })
+  win.webContents.on('did-get-redirect-request', (event, oldURL, newURL, isMainFrame, httpResoponseCode, requestMethod, referrer, headers) => {
+    log.warn('did-get-redirect-request', newURL, httpResoponseCode, event);
+  });
   win.loadURL(getNewWinUrl(url));
-  
+
   // win.on('resize', () => {
   //   const [width, height] = win.getContentSize()
 
@@ -146,15 +175,15 @@ function createDefaultWindow() {
   if (config.Url) {
     mainWindow.loadURL(config.Url);
   } else {
-    mainWindow.loadURL(format({
+    mainWindow.loadURL(formatUrl({
       protocol: 'file',
       pathname: path.join(__dirname, "../renderer/version.html"),
       hash: `v${app.getVersion()}`
     }))
   }
-  mainWindow.webContents.session.on('will-download', (event, item)=>{
+  mainWindow.webContents.session.on('will-download', (event, item) => {
     event.preventDefault();
-    dialog.showErrorBox('错误','禁止下载文件');
+    dialog.showErrorBox('错误', '禁止下载文件');
   })
   mainWindow.webContents.on('new-window', (event, url, frameName, disposition, options, additionalFeatures) => {
     event.preventDefault();
@@ -162,18 +191,30 @@ function createDefaultWindow() {
       dialog.showErrorBox('错误', config.OpenNewWindow.message);
       return;
     }
-    createClientWindow(url);
+    if (checkUrlCanOpen(url, config.OpenNewWindow.whiteList)) {
+      createClientWindow(url);
+    } else {
+      dialog.showErrorBox('错误', config.OpenNewWindow.message);
+    }
   })
   return mainWindow;
 }
 ipcMain.on('open-new-window', (event: IpcMessageEvent, url: string) => {
-  createClientWindow(url);
+  if (checkUrlCanOpen(url, config.OpenNewWindow.whiteList)) {
+    createClientWindow(url);
+  } else {
+    dialog.showErrorBox('错误', config.OpenNewWindow.message);
+  }
 })
-ipcMain.on('close-window', (event:IpcMessageEvent, winId:number) =>{
+ipcMain.on('close-window', (event: IpcMessageEvent, winId: number) => {
   const win = BrowserWindow.fromId(winId);
-  if(win){
+  if (win) {
     win.close();
   }
+});
+ipcMain.on('check-url-can-open', (event:IpcMessageEvent, url:string)=>{
+  event.returnValue = checkUrlCanOpen(url, config.OpenNewWindow.whiteList);
+  console.log('check-url-can-open',url, event.returnValue);
 });
 autoUpdater.on('checking-for-update', () => {
   sendStatusToWindow('Checking for update...');
