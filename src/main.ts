@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Menu, dialog } from "electron";
+import { app, BrowserWindow, Menu, dialog, webContents, ipcMain, IpcMessageEvent } from "electron";
 import * as path from "path";
 import { format } from "url";
 import * as log from "electron-log";
@@ -22,6 +22,11 @@ autoUpdater.logger = log;
 log.transports.file.level = 'info';
 log.info('App starting...', isDevelopment);
 
+const getNewWinUrl = (url: string) => format({
+  protocol: 'file',
+  pathname: path.join(__dirname, "../renderer/win.html"),
+  hash: encodeURI(url)
+});
 function getConfig() {
   if (!isMac && !isWin) {
     dialog.showErrorBox('系统错误', '不支持此操作系统');
@@ -34,6 +39,7 @@ function getConfig() {
     t = new Config();
     t.save(configPath);
   }
+  console.log(t);
   return t;
 }
 autoUpdater.autoDownload = config.Update.autoDownload;
@@ -77,6 +83,49 @@ function sendStatusToWindow(text: string) {
   mainWindow.webContents.send('message', text);
 }
 
+function createClientWindow(url: string) {
+  const win = new BrowserWindow({
+    fullscreen: false,
+    frame: false,
+    modal: false,
+    x: undefined,
+    y: undefined,
+    width: undefined,
+    height: undefined,
+    autoHideMenuBar: true,
+    parent: mainWindow,
+    center: true,
+    webPreferences: {
+      nodeIntegration: true
+    }
+  });
+  if(isDevelopment){
+    win.webContents.openDevTools();
+  }
+  win.webContents.once('did-finish-load', () => {
+    win.webContents.send('set-window-id', win.id);
+  })
+  win.loadURL(getNewWinUrl(url));
+  
+  // win.on('resize', () => {
+  //   const [width, height] = win.getContentSize()
+
+  //   for (let wc of webContents.getAllWebContents()) {
+  //     // Check if `wc` belongs to a webview in the `win` window.
+  //     if (wc.hostWebContents &&
+  //       wc.hostWebContents.id === win.webContents.id) {
+  //         console.log(width, height);
+  //       wc.setSize({
+  //         normal: {
+  //           width: width,
+  //           height: height
+  //         }
+  //       })
+  //     }
+  //   }
+  // })
+  return win;
+}
 function createDefaultWindow() {
   mainWindow = new BrowserWindow({
     fullscreen: config.FullScreen,
@@ -99,43 +148,33 @@ function createDefaultWindow() {
   } else {
     mainWindow.loadURL(format({
       protocol: 'file',
-      pathname: path.join(__dirname, "../version.html"),
+      pathname: path.join(__dirname, "../renderer/version.html"),
       hash: `v${app.getVersion()}`
     }))
   }
-
+  mainWindow.webContents.session.on('will-download', (event, item)=>{
+    event.preventDefault();
+    dialog.showErrorBox('错误','禁止下载文件');
+  })
   mainWindow.webContents.on('new-window', (event, url, frameName, disposition, options, additionalFeatures) => {
-    // open window as modal
     event.preventDefault();
     if (!config.OpenNewWindow.canOpenNewWindow) {
       dialog.showErrorBox('错误', config.OpenNewWindow.message);
       return;
     }
-    Object.assign(options, {
-      fullscreen: false,
-      frame: false,
-      modal: true,
-      x: undefined,
-      y: undefined,
-      width: undefined,
-      height: undefined,
-      autoHideMenuBar: true,
-      parent: mainWindow,
-      center: true,
-      webPreferences: {
-        nodeIntegration: false
-      }
-    })
-    //event.newGuest = new BrowserWindow(options)
-    const win = new BrowserWindow(options);
-    //win.maximize();
-    Object.assign(event, {
-      newGuest: win
-    })
+    createClientWindow(url);
   })
   return mainWindow;
 }
-
+ipcMain.on('open-new-window', (event: IpcMessageEvent, url: string) => {
+  createClientWindow(url);
+})
+ipcMain.on('close-window', (event:IpcMessageEvent, winId:number) =>{
+  const win = BrowserWindow.fromId(winId);
+  if(win){
+    win.close();
+  }
+});
 autoUpdater.on('checking-for-update', () => {
   sendStatusToWindow('Checking for update...');
 })

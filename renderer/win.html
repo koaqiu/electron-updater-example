@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>new window</title>
+    <style>
+        html,body{height: 100%;}
+        body{margin: 0;padding: 0}
+        header{height: 20px;
+            height: 20px;
+            border-bottom: #ccc 1px solid;
+            box-shadow: #000 0px 0px 10px;
+            position:absolute;
+            width: 100%;
+            z-index: 9999;
+        }
+        #title{
+            font-size: 12px;padding-left: 5px;line-height: 20px;display: inline-block;
+            overflow: hidden;height: 20px;
+            -webkit-user-select: none;
+            -webkit-app-region: drag;
+        }
+        #win{
+            height: calc(100% - 20px);
+            padding-top: 20px;
+        }
+        .tool-bar{
+            position:absolute;top: 0;right: 0;
+            background-color: #eee;
+        }
+        button {
+            -webkit-app-region: no-drag;
+            margin: 0;border: none;padding: 5px;background-color: transparent;
+            color: #f00;line-height: 10px;
+        }
+    </style>
+</head>
+
+<body>
+    <header style="-webkit-app-region: drag">
+        <span id="title">loading...</span>
+        <div class="tool-bar"><button id="btnClose">x</button></div>
+    </header>
+    <webview id="win" plugins autosize allowpopups src="data:text/plain, loading..."></webview>
+    <script type="text/javascript">
+        const { ipcRenderer } = require('electron');
+        let winid = 0;
+        ipcRenderer.on('set-window-id', (event, id)=>{
+            winid = id;
+        });
+        const openNewWindow = (url) => {
+            ipcRenderer.send('open-new-window', url)
+        }
+        document.getElementById('btnClose').addEventListener('click', (e)=>{
+            ipcRenderer.send('close-window', winid);
+        });
+        win.addEventListener('page-title-updated', (e) => {
+            document.getElementById('title').innerText = e.title;
+        });
+        win.addEventListener('new-window', (e) => {
+            openNewWindow(e.url);
+        })
+        const onload = () => {
+            win.removeEventListener('dom-ready', onload);
+            if (location.hash) {
+                win.loadURL(decodeURI(location.hash.substr(1)))
+            }
+        }
+        win.addEventListener("dom-ready", onload);
+        if (location.hash) {
+            document.getElementById('title').innerText = decodeURI(location.hash.substr(1))
+        }
+    </script>
+</body>
+
+</html>
