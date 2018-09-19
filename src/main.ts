@@ -22,6 +22,23 @@ autoUpdater.logger = log;
 log.transports.file.level = 'info';
 log.info('App starting...', isDevelopment);
 
+const showErrorBox = (message: string, title = '错误', callBack: Function = null, win: BrowserWindow = null) => {
+  function cb (reponse: number, checkBoxChecked: boolean) {
+    if (callBack) {
+      callBack(reponse, checkBoxChecked);
+    }
+  }
+  return win != null ? dialog.showMessageBox(win, {
+    title: title,
+    message: message,
+    type: 'error'
+  }, cb) : dialog.showMessageBox({
+    title: title,
+    message: message,
+    type: 'error'
+  }, cb);
+}
+
 const getNewWinUrl = (url: string) => formatUrl({
   protocol: 'file',
   pathname: path.join(__dirname, "../renderer/win.html"),
@@ -111,16 +128,13 @@ function sendStatusToWindow(text: string) {
 
 function createClientWindow(url: string) {
   const win = new BrowserWindow({
-    fullscreen: false,
+    fullscreen: true,
     frame: false,
-    modal: false,
-    x: undefined,
-    y: undefined,
-    width: undefined,
-    height: undefined,
+    // modal: true,
     autoHideMenuBar: true,
     parent: mainWindow,
     center: true,
+    skipTaskbar: true,
     webPreferences: {
       nodeIntegration: true
     }
@@ -159,8 +173,10 @@ function createDefaultWindow() {
   mainWindow = new BrowserWindow({
     fullscreen: config.FullScreen,
     frame: !config.FullScreen,
-    alwaysOnTop: config.AlwaysOnTop,
+    // alwaysOnTop: config.AlwaysOnTop,
+    alwaysOnTop: true,
     fullscreenWindowTitle: false,
+    skipTaskbar: true,
     webPreferences: {
       // nodeIntegration:false,
       nativeWindowOpen: true,
@@ -183,18 +199,18 @@ function createDefaultWindow() {
   }
   mainWindow.webContents.session.on('will-download', (event, item) => {
     event.preventDefault();
-    dialog.showErrorBox('错误', '禁止下载文件');
+    showErrorBox('禁止下载文件', '错误', null, mainWindow);
   })
   mainWindow.webContents.on('new-window', (event, url, frameName, disposition, options, additionalFeatures) => {
     event.preventDefault();
     if (!config.OpenNewWindow.canOpenNewWindow) {
-      dialog.showErrorBox('错误', config.OpenNewWindow.message);
+      showErrorBox(config.OpenNewWindow.message, '错误', null, mainWindow);
       return;
     }
     if (checkUrlCanOpen(url, config.OpenNewWindow.whiteList)) {
       createClientWindow(url);
     } else {
-      dialog.showErrorBox('错误', config.OpenNewWindow.message);
+      showErrorBox(config.OpenNewWindow.message, '错误', null, mainWindow);
     }
   })
   return mainWindow;
@@ -203,7 +219,7 @@ ipcMain.on('open-new-window', (event: IpcMessageEvent, url: string) => {
   if (checkUrlCanOpen(url, config.OpenNewWindow.whiteList)) {
     createClientWindow(url);
   } else {
-    dialog.showErrorBox('错误', config.OpenNewWindow.message);
+    showErrorBox(config.OpenNewWindow.message, '错误', null, mainWindow);
   }
 })
 ipcMain.on('close-window', (event: IpcMessageEvent, winId: number) => {
@@ -212,9 +228,11 @@ ipcMain.on('close-window', (event: IpcMessageEvent, winId: number) => {
     win.close();
   }
 });
-ipcMain.on('check-url-can-open', (event:IpcMessageEvent, url:string)=>{
-  event.returnValue = checkUrlCanOpen(url, config.OpenNewWindow.whiteList);
-  console.log('check-url-can-open',url, event.returnValue);
+ipcMain.on('check-url-can-open', (event: IpcMessageEvent, url: string) => {
+  const canOpen = checkUrlCanOpen(url, config.OpenNewWindow.whiteList);
+  event.returnValue = canOpen;
+  // if (!canOpen)
+  //   showErrorBox(config.OpenNewWindow.message, '错误', null, mainWindow);
 });
 autoUpdater.on('checking-for-update', () => {
   sendStatusToWindow('Checking for update...');

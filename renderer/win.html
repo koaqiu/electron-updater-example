@@ -17,7 +17,6 @@
             font-size: 12px;padding-left: 5px;line-height: 20px;display: inline-block;
             overflow: hidden;height: 20px;
             -webkit-user-select: none;
-            -webkit-app-region: drag;
         }
         #win{
             height: calc(100% - 20px);
@@ -28,7 +27,6 @@
             background-color: #eee;
         }
         button {
-            -webkit-app-region: no-drag;
             margin: 0;border: none;padding: 5px;background-color: transparent;
             color: #f00;line-height: 10px;
         }
@@ -36,7 +34,7 @@
 </head>
 
 <body>
-    <header style="-webkit-app-region: drag">
+    <header>
         <span id="title">loading...</span>
         <div class="tool-bar"><button id="btnClose">x</button></div>
     </header>
@@ -59,23 +57,19 @@
         win.addEventListener('new-window', (e) => {
             openNewWindow(e.url);
         });
-        win.addEventListener('will-navigate', (event)=>{
-            const canOpen = ipcRenderer.sendSync('check-url-can-open', event.url);
-            console.log('will-navigate', canOpen);
-            if(!ipcRenderer.sendSync('check-url-can-open', event.url)){
+        const checkUrlCanOpen = (event) =>{
+            const canOpen = ipcRenderer.sendSync('check-url-can-open', event.type == 'did-get-redirect-request' ? event.newURL : event.url);
+            console.log(event.type, canOpen);
+            if(!canOpen){
                 event.preventDefault();
                 event.stopPropagation();
-                // window.close();
-                //win.loadURL('data:text/plain, 该页面禁止访问');
-                document.getElementById('win').remove();
+                window.close();
+                win.loadURL('data:text/plain, 403');
             }
-        })
-        win.addEventListener('did-get-redirect-request', (event, oldURL, newURL, isMainFrame, httpResoponseCode, requestMethod, referrer, headers) => {
-            //console.log('did-get-redirect-request', newURL, httpResoponseCode, event);
-            if(!ipcRenderer.sendSync('check-url-can-open', event.newURL)){
-                event.preventDefault();
-            }
-        });
+        }
+        win.addEventListener('event-did-navigate-in-page', checkUrlCanOpen);
+        win.addEventListener('will-navigate', checkUrlCanOpen)
+        win.addEventListener('did-get-redirect-request', checkUrlCanOpen);
         const onload = () => {
             win.removeEventListener('dom-ready', onload);
             if (location.hash) {
