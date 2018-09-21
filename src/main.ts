@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Menu, dialog, webContents, ipcMain, IpcMessageEvent } from "electron";
+import { app, BrowserWindow, Menu, dialog, webContents, ipcMain, IpcMessageEvent, globalShortcut } from "electron";
 import * as path from "path";
 import { format as formatUrl, parse as parseUrl } from 'url'
 import * as log from "electron-log";
@@ -23,7 +23,7 @@ log.transports.file.level = 'info';
 log.info('App starting...', isDevelopment);
 
 const showErrorBox = (message: string, title = '错误', callBack: Function = null, win: BrowserWindow = null) => {
-  function cb (reponse: number, checkBoxChecked: boolean) {
+  function cb(reponse: number, checkBoxChecked: boolean) {
     if (callBack) {
       callBack(reponse, checkBoxChecked);
     }
@@ -39,11 +39,6 @@ const showErrorBox = (message: string, title = '错误', callBack: Function = nu
   }, cb);
 }
 
-const getNewWinUrl = (url: string) => formatUrl({
-  protocol: 'file',
-  pathname: path.join(__dirname, "../renderer/win.html"),
-  hash: encodeURI(url)
-});
 const checkUrlCanOpen = (url: string, whiteList: string[]) => {
   //if (!config.OpenNewWindow.canOpenNewWindow) return false;
   if (!whiteList || whiteList.length < 1) return true;
@@ -126,49 +121,6 @@ function sendStatusToWindow(text: string) {
   mainWindow.webContents.send('message', text);
 }
 
-function createClientWindow(url: string) {
-  const win = new BrowserWindow({
-    fullscreen: true,
-    frame: false,
-    // modal: true,
-    autoHideMenuBar: true,
-    parent: mainWindow,
-    center: true,
-    skipTaskbar: true,
-    webPreferences: {
-      nodeIntegration: true
-    }
-  });
-  if (isDevelopment) {
-    win.webContents.openDevTools();
-  }
-  win.webContents.once('did-finish-load', () => {
-    win.webContents.send('set-window-id', win.id);
-  })
-  win.webContents.on('did-get-redirect-request', (event, oldURL, newURL, isMainFrame, httpResoponseCode, requestMethod, referrer, headers) => {
-    log.warn('did-get-redirect-request', newURL, httpResoponseCode, event);
-  });
-  win.loadURL(getNewWinUrl(url));
-
-  // win.on('resize', () => {
-  //   const [width, height] = win.getContentSize()
-
-  //   for (let wc of webContents.getAllWebContents()) {
-  //     // Check if `wc` belongs to a webview in the `win` window.
-  //     if (wc.hostWebContents &&
-  //       wc.hostWebContents.id === win.webContents.id) {
-  //         console.log(width, height);
-  //       wc.setSize({
-  //         normal: {
-  //           width: width,
-  //           height: height
-  //         }
-  //       })
-  //     }
-  //   }
-  // })
-  return win;
-}
 function createDefaultWindow() {
   mainWindow = new BrowserWindow({
     fullscreen: config.FullScreen,
@@ -178,8 +130,9 @@ function createDefaultWindow() {
     fullscreenWindowTitle: false,
     skipTaskbar: true,
     webPreferences: {
-      // nodeIntegration:false,
+      nodeIntegration: true,
       nativeWindowOpen: true,
+      preload: path.join(__dirname, "../renderer/preload.js"),
     }
   });
   if (isDevelopment) {
@@ -189,7 +142,12 @@ function createDefaultWindow() {
     mainWindow = null;
   });
   if (config.Url) {
-    mainWindow.loadURL(config.Url);
+    // mainWindow.loadURL(config.Url);
+    mainWindow.loadURL(formatUrl({
+      protocol: 'file',
+      pathname: path.join(__dirname, "../renderer/website.html"),
+      hash: encodeURI(config.Url)
+    }))
   } else {
     mainWindow.loadURL(formatUrl({
       protocol: 'file',
@@ -208,20 +166,14 @@ function createDefaultWindow() {
       return;
     }
     if (checkUrlCanOpen(url, config.OpenNewWindow.whiteList)) {
-      createClientWindow(url);
+      // createClientWindow(url);
+      mainWindow.webContents.send('open-inner-window', url);
     } else {
       showErrorBox(config.OpenNewWindow.message, '错误', null, mainWindow);
     }
   })
   return mainWindow;
 }
-ipcMain.on('open-new-window', (event: IpcMessageEvent, url: string) => {
-  if (checkUrlCanOpen(url, config.OpenNewWindow.whiteList)) {
-    createClientWindow(url);
-  } else {
-    showErrorBox(config.OpenNewWindow.message, '错误', null, mainWindow);
-  }
-})
 ipcMain.on('close-window', (event: IpcMessageEvent, winId: number) => {
   const win = BrowserWindow.fromId(winId);
   if (win) {
@@ -305,11 +257,16 @@ app.on('ready', function () {
   const menu = Menu.buildFromTemplate(template);
   Menu.setApplicationMenu(menu);
   createDefaultWindow();
+  const ret = globalShortcut.register('CommandOrControl+W', () => {
+    mainWindow.webContents.send('close-window')
+  })
+
+  if (!ret) {
+    log.warn('registration failed')
+  }
+
   if (config.Update.autoCheck) {
     // autoUpdater.checkForUpdates();
     autoUpdater.checkForUpdatesAndNotify();
   }
 });
-
-// In this file you can include the rest of your app"s specific main process
-// code. You can also put them in separate files and require them here.
