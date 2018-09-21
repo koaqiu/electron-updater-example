@@ -141,20 +141,28 @@ function createDefaultWindow() {
   mainWindow.on('closed', () => {
     mainWindow = null;
   });
+  let uriToOpen = formatUrl({
+    protocol: 'file',
+    pathname: path.join(__dirname, "../renderer/version.html"),
+    hash: `v${app.getVersion()}`
+  });
   if (config.Url) {
-    // mainWindow.loadURL(config.Url);
-    mainWindow.loadURL(formatUrl({
-      protocol: 'file',
-      pathname: path.join(__dirname, "../renderer/website.html"),
-      hash: encodeURI(config.Url)
-    }))
-  } else {
-    mainWindow.loadURL(formatUrl({
-      protocol: 'file',
-      pathname: path.join(__dirname, "../renderer/version.html"),
-      hash: `v${app.getVersion()}`
-    }))
+    const uri = parseUrl(config.Url);
+    if (uri.protocol == null || uri.protocol == 'file') {
+      uriToOpen = formatUrl({
+        protocol: 'file',
+        pathname: path.join(__dirname, config.Url),
+      });
+    } else if (uri.protocol == 'http' || uri.protocol == 'https') {
+      uriToOpen = formatUrl({
+        protocol: 'file',
+        pathname: path.join(__dirname, "../renderer/website.html"),
+        hash: encodeURI(config.Url)
+      });
+    }
   }
+  mainWindow.loadURL(uriToOpen);
+
   mainWindow.webContents.session.on('will-download', (event, item) => {
     event.preventDefault();
     showErrorBox('禁止下载文件', '错误', null, mainWindow);

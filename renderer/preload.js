@@ -175,7 +175,6 @@ ipcRenderer.on('close-window', function(event){
 //         })
 // });
 document.addEventListener('DOMContentLoaded', () => {
-    document.title = decodeURI(location.hash.substr(1));
     if (location.hash) {
         const url = decodeURI(location.hash.substr(1))
         const webview = newElement('webview');
