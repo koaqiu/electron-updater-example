@@ -1,8 +1,8 @@
 {
   "name": "electron-updater-ts",
-  "version": "0.0.1",
+  "version": "0.0.5",
   "main": "./out/main.js",
-  "description": "electron-updater ts project",
+  "description": "自动更新安装测试",
   "author": "koaqiu@gmail.com",
   "scripts": {
     "start": "electron .",
@@ -11,7 +11,7 @@
     "dist": "npm run build:ts && electron-builder -w"
   },
   "devDependencies": {
-    "@types/node": "^10.9.4",
+    "@types/node": "^10.10.1",
     "@types/semver": "^5.5.0",
     "cross-env": "^5.2.0",
     "electron": "^1.7.9",
