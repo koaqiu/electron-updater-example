@@ -38,6 +38,10 @@
     },
     "nsis": {
       "perMachine": true
-    }
+    },
+    "files": [
+      "out",
+      "renderer"
+    ]
   }
 }
